@@ -1,0 +1,482 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Management
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  password      String
+  firstName     String
+  lastName      String
+  phone         String?
+  role          UserRole
+  isActive      Boolean  @default(true)
+  isVerified    Boolean  @default(false)
+  verificationToken String?
+  resetPasswordToken String?
+  resetPasswordExpires DateTime?
+  lastLogin     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  farms         Farm[]
+  workers       Worker[]
+  tasks         Task[]
+  sales         Sale[]
+  marketplaceProducts MarketplaceProduct[]
+  consultations Consultation[]
+  healthAlerts HealthAlert[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  FARMER
+  WORKER
+  VETERINARIAN
+  ADMIN
+}
+
+// Farm Management
+model Farm {
+  id          String   @id @default(cuid())
+  name        String
+  farmType    String[] // ["poultry", "mixed", "organic"]
+  farmSize    Float?   // in acres
+  address     String?
+  city        String?
+  state       String?
+  country     String   @default("Kenya")
+  coordinates Json?    // {lat: number, lng: number}
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  flocks      Flock[]
+  workers     Worker[]
+  tasks       Task[]
+  expenses    Expense[]
+  incomes     Income[]
+
+  @@map("farms")
+}
+
+// Breed Management
+model Breed {
+  id            String   @id @default(cuid())
+  name          String
+  category      BreedCategory
+  description   String?
+  characteristics String[]
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  flocks       Flock[]
+
+  @@map("breeds")
+}
+
+enum BreedCategory {
+  BROILER
+  KIENYEJI
+  IMPROVED
+  LAYER
+  DUAL_PURPOSE
+}
+
+// Flock Management
+model Flock {
+  id              String   @id @default(cuid())
+  name            String
+  breedId         String
+  species         String   @default("chicken")
+  quantity        Int
+  unitPrice       Float?
+  age             Int      @default(0) // in days
+  status          FlockStatus
+  startDate       DateTime
+  expectedEndDate DateTime?
+  actualEndDate   DateTime?
+  mortality       Int      @default(0)
+  health          FlockHealth @default(UNKNOWN)
+  feedConversion  Float?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  farmId          String
+  farm            Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  breed           Breed    @relation(fields: [breedId], references: [id])
+  dailyRecords    DailyRecord[]
+  tasks           Task[]
+  sales           Sale[]
+  healthAlerts    HealthAlert[]
+
+  @@map("flocks")
+}
+
+enum FlockStatus {
+  ACTIVE
+  COMPLETED
+  INACTIVE
+  SOLD
+}
+
+enum FlockHealth {
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+  UNKNOWN
+}
+
+// Daily Records (Feed, Health, Weight, Eggs)
+model DailyRecord {
+  id          String   @id @default(cuid())
+  date        DateTime
+  type        RecordType
+  flockId     String
+  quantity    Float?   // for feed, eggs, etc.
+  unit        String?  // kg, pieces, etc.
+  notes       String?
+  workerId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  flock       Flock    @relation(fields: [flockId], references: [id], onDelete: Cascade)
+  worker      Worker?  @relation(fields: [workerId], references: [id])
+
+  @@map("daily_records")
+}
+
+enum RecordType {
+  FEED
+  HEALTH
+  WEIGHT
+  EGGS
+  MORTALITY
+  VACCINATION
+  MEDICATION
+}
+
+// Worker Management
+model Worker {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  farmId        String
+  role          WorkerRole
+  salary        Float?
+  startDate     DateTime
+  endDate       DateTime?
+  isActive      Boolean  @default(true)
+  permissions   String[] // ["feed", "health", "weight", "eggs"]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  farm          Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  dailyRecords  DailyRecord[]
+  tasks         Task[]
+
+  @@map("workers")
+}
+
+enum WorkerRole {
+  FARM_HAND
+  SUPERVISOR
+  MANAGER
+  SPECIALIST
+}
+
+// Task Management
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  dueDate     DateTime
+  priority    TaskPriority
+  status      TaskStatus
+  category    TaskCategory
+  assignedTo  String?
+  flockId     String?
+  farmId      String
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  assignedWorker Worker? @relation(fields: [assignedTo], references: [id])
+  flock         Flock?  @relation(fields: [flockId], references: [id])
+  farm          Farm    @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+  @@map("tasks")
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+  CANCELLED
+}
+
+enum TaskCategory {
+  HEALTH
+  FEEDING
+  MAINTENANCE
+  HARVEST
+  ADMINISTRATION
+  OTHER
+}
+
+// Financial Management
+model Expense {
+  id          String   @id @default(cuid())
+  amount      Float
+  category    ExpenseCategory
+  description String
+  date        DateTime
+  farmId      String
+  flockId     String?
+  receipt     String?  // file path
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  farm        Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  flock       Flock?   @relation(fields: [flockId], references: [id])
+
+  @@map("expenses")
+}
+
+enum ExpenseCategory {
+  FEED
+  LABOR
+  MEDICINE
+  VACCINES
+  EQUIPMENT
+  MAINTENANCE
+  UTILITIES
+  OTHER
+}
+
+model Income {
+  id          String   @id @default(cuid())
+  amount      Float
+  category    IncomeCategory
+  description String
+  date        DateTime
+  farmId      String
+  flockId     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  farm        Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  flock       Flock?   @relation(fields: [flockId], references: [id])
+
+  @@map("incomes")
+}
+
+enum IncomeCategory {
+  EGG_SALES
+  MEAT_SALES
+  LIVE_BIRD_SALES
+  SERVICES
+  OTHER
+}
+
+// Sales Management
+model Sale {
+  id          String   @id @default(cuid())
+  quantity    Int
+  unitPrice   Float
+  totalAmount Float
+  customerName String?
+  customerPhone String?
+  status      SaleStatus
+  saleDate    DateTime
+  farmId      String
+  flockId     String?
+  userId      String
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  farm        Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  flock       Flock?   @relation(fields: [flockId], references: [id])
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sales")
+}
+
+enum SaleStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+// Marketplace
+model MarketplaceProduct {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  price       Float
+  category    ProductCategory
+  condition   ProductCondition
+  images      String[] // file paths
+  location    String?
+  isAvailable Boolean  @default(true)
+  sellerId    String
+  farmId      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  seller      User     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  farm        Farm?    @relation(fields: [farmId], references: [id])
+
+  @@map("marketplace_products")
+}
+
+enum ProductCategory {
+  FEED
+  EQUIPMENT
+  MEDICINE
+  BIRDS
+  EGGS
+  OTHER
+}
+
+enum ProductCondition {
+  NEW
+  USED
+  REFURBISHED
+}
+
+// Health Management
+model HealthAlert {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  severity    AlertSeverity
+  status      AlertStatus
+  farmId      String
+  flockId     String?
+  reportedBy  String
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  farm        Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  flock       Flock?   @relation(fields: [flockId], references: [id])
+  reporter    User     @relation(fields: [reportedBy], references: [id], onDelete: Cascade)
+  resolver    User?    @relation(fields: [resolvedBy], references: [id])
+
+  @@map("health_alerts")
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+// Veterinary Consultations
+model Consultation {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  status      ConsultationStatus
+  farmId      String
+  flockId     String?
+  farmerId    String
+  vetId       String?
+  scheduledAt DateTime?
+  completedAt DateTime?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  farm        Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  flock       Flock?   @relation(fields: [flockId], references: [id])
+  farmer      User     @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  vet         User?    @relation(fields: [vetId], references: [id])
+
+  @@map("consultations")
+}
+
+enum ConsultationStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// Notifications
+model Notification {
+  id          String   @id @default(cuid())
+  title       String
+  message     String
+  type        NotificationType
+  isRead      Boolean  @default(false)
+  userId      String
+  data        Json?    // additional data
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+enum NotificationType {
+  TASK_DUE
+  HEALTH_ALERT
+  SALE_COMPLETED
+  EXPENSE_REMINDER
+  SYSTEM_UPDATE
+  OTHER
+}
+
+// Indexes are defined within each model above

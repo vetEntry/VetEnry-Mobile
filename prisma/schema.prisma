@@ -1,0 +1,1407 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                 String                         @id @default(cuid())
+  email              String                         @unique
+  phone              String?                        @unique
+  password           String
+  firstName          String
+  lastName           String
+  profileImage       String?
+  status             UserStatus                     @default(ACTIVE)
+  emailVerified      Boolean                        @default(false)
+  phoneVerified      Boolean                        @default(false)
+  createdAt          DateTime                       @default(now())
+  updatedAt          DateTime                       @updatedAt
+  lastLoginAt        DateTime?
+  preferredLanguage  String                         @default("en")
+  timezone           String                         @default("UTC")
+  activities         Activity[]
+  admin              Admin?
+  devices            Device[]
+  farmWorker         FarmWorker?
+  farmer             Farmer?
+  receivedMessages   Message[]                      @relation("ReceivedMessages")
+  sentMessages       Message[]                      @relation("SentMessages")
+  notifications      Notification[]
+  resetTokens        ResetToken[]
+  subscriptions      Subscription[]
+  settings           UserSettings?
+  veterinarian       Veterinarian?
+  conversations      Conversation[]                 @relation("UserConversations")
+  roles              UserRole[] // New field for many-to-many relationship with roles
+  supportTickets     SupportTicket[]
+  supportMessages    SupportMessage[]
+  productionRecords  ProductionRecord[] // Add this line to create the opposite relation
+  products           Product[]
+  productReviews     MarketplaceProductReview[] // Add this line for product reviews
+  productReviewLikes MarketplaceProductReviewLike[] // Add this line for review likes
+  performanceMetrics PerformanceMetric[] // Add this line for performance metrics
+
+  @@index([email])
+  @@index([phone])
+}
+
+model Role {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  description String?
+  permissions Json?
+  users       UserRole[] // Changed to use the join table
+}
+
+// New junction table for many-to-many relationship between User and Role
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  roleId    String
+  isActive  Boolean  @default(true)
+  isPrimary Boolean  @default(false) // To track which role is currently active/selected
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+}
+
+model Veterinarian {
+  id                  String              @id @default(cuid())
+  userId              String              @unique
+  veterinarianType    VeterinarianType    @default(PARAVETERINARIAN)
+  licenseNumber       String              @unique
+  licenseVerified     Boolean             @default(false)
+  kvbNumber           String? // Added KVB number field
+  nationalIdPath      String? // Added path to national ID document
+  passportPath        String? // Added path to passport document
+  idDocumentVerified  Boolean             @default(false) // Verification status for documents
+  isActive            Boolean             @default(false) // Add isActive field with default false
+  specializations     String[]
+  qualifications      String[]
+  biography           String?
+  experience          Int?
+  serviceArea         Json?
+  averageRating       Float?
+  totalReviews        Int                 @default(0)
+  isAvailableForChat  Boolean             @default(true)
+  isAvailableForVisit Boolean             @default(true)
+  // Payment settings
+  acceptsMpesa        Boolean             @default(true)
+  mpesaPhoneNumber    String?
+  mpesaBusinessNumber String?
+  acceptsBankTransfer Boolean             @default(false)
+  bankAccountName     String?
+  bankAccountNumber   String?
+  bankName            String?
+  bankBranchName      String?
+  bankSwiftCode       String?
+  // Fee settings
+  consultationFee     Float               @default(0)
+  emergencyFee        Float               @default(0)
+  followUpFee         Float?
+  travelFeePerKm      Float               @default(0)
+  discountPercentage  Int?
+  appointments        Appointment[]
+  availability        Availability[]
+  consultations       Consultation[]
+  earnings            Earning[]
+  FlockHealthRecord   FlockHealthRecord[]
+  reviews             Review[]
+  servicePackages     ServicePackage[]
+  treatmentLibrary    TreatmentTemplate[]
+  appointmentTypes    AppointmentType[]
+  timeConfigurations  TimeConfiguration[]
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([licenseNumber])
+  @@index([kvbNumber])
+}
+
+model Farmer {
+  id                  String               @id @default(cuid())
+  userId              String               @unique
+  appointments        Appointment[]
+  consultations       Consultation[]
+  farmWorkers         FarmWorker[]
+  reviews             Review[]
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  farms               Farm[] // Changed to support multiple farms
+  sales               Sale[] // <--- Add this
+  marketplaceProducts MarketplaceProduct[] // Add marketplace products relation
+  breeds              AnimalBreed[] // Add breeds relation
+
+  @@index([userId])
+}
+
+enum WorkerStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum FarmStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+  DELETED
+}
+
+enum FlockStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+  DELETED
+}
+
+model FarmWorker {
+  id                String            @id @default(cuid())
+  userId            String            @unique
+  farmerId          String
+  position          String?
+  responsibilities  String[]
+  accessLevel       String            @default("BASIC")
+  temporaryPassword String?
+  passwordChanged   Boolean           @default(false)
+  dataEntries       DataEntry[]
+  farmer            Farmer            @relation(fields: [farmerId], references: [id])
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedFlocks    FarmWorkerFlock[]
+  tasks             Task[]
+  photos            Photo[] // Added relation to Photo model
+  sales             Sale[] // <--- Add this
+  status            WorkerStatus      @default(ACTIVE)
+  healthRecords     FlockHealthRecord[] // Opposite relation for health records
+
+  @@index([userId])
+  @@index([farmerId])
+}
+
+model Admin {
+  id             String          @id @default(cuid())
+  userId         String          @unique
+  adminLevel     String          @default("SUPPORT")
+  department     String?
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  announcements  Announcement[]
+  supportTickets SupportTicket[]
+
+  @@index([userId])
+}
+
+model SubscriptionPlan {
+  id            String               @id @default(cuid())
+  name          String
+  description   String?
+  price         Float
+  currency      String               @default("USD")
+  interval      SubscriptionInterval
+  features      Json
+  isActive      Boolean              @default(true)
+  trialDays     Int                  @default(0)
+  roleId        String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @default(now()) @updatedAt
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id              String             @id @default(cuid())
+  userId          String
+  planId          String
+  status          SubscriptionStatus @default(ACTIVE)
+  startDate       DateTime           @default(now())
+  endDate         DateTime?
+  canceledAt      DateTime?
+  trialEndsAt     DateTime?
+  paymentMethodId String?
+  lastPaymentDate DateTime?
+  nextPaymentDate DateTime?
+  paymentHistory  Payment[]
+  plan            SubscriptionPlan   @relation(fields: [planId], references: [id])
+  user            User               @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([planId])
+}
+
+model Payment {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  amount         Float
+  currency       String       @default("USD")
+  status         String
+  paymentMethod  String?
+  paymentDetails Json?
+  transactionId  String?
+  createdAt      DateTime     @default(now())
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@index([subscriptionId])
+}
+
+model FarmWorkerFlock {
+  id           String     @id @default(cuid())
+  farmWorkerId String
+  flockId      String
+  assignedAt   DateTime   @default(now())
+  permissions  String[]
+  farmWorker   FarmWorker @relation(fields: [farmWorkerId], references: [id])
+  flock        Flock      @relation(fields: [flockId], references: [id])
+
+  @@unique([farmWorkerId, flockId])
+  @@index([farmWorkerId])
+  @@index([flockId])
+}
+
+model FlockHealthRecord {
+  id             String        @id @default(cuid())
+  flockId        String
+  date           DateTime
+  issue          String?
+  diagnosis      String?
+  treatment      String?
+  medications    String[]
+  mortality      Int?
+  affectedCount  Int?
+  notes          String?
+  veterinarianId String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @default(now()) @updatedAt
+  flock          Flock         @relation(fields: [flockId], references: [id])
+  veterinarian   Veterinarian? @relation(fields: [veterinarianId], references: [id])
+  attachments    Attachment[]  @relation("AttachmentToFlockHealthRecord")
+  // New fields for health record extension
+  workerId       String?       // Farm worker who reported/handled the case
+  worker         FarmWorker?   @relation(fields: [workerId], references: [id])
+  symptoms       String?       // Symptoms observed
+  action         String?       // Action taken (e.g. quarantine, vet call)
+  followUp       String?       // Follow up notes
+
+  @@index([flockId])
+  @@index([veterinarianId])
+  @@index([workerId])
+}
+
+model DailyRecord {
+  id               String     @id @default(cuid())
+  flockId          String
+  flock            Flock      @relation(fields: [flockId], references: [id])
+  recordedBy       String // Farm worker ID
+  date             DateTime   @default(now())
+  feedAmount       Float?
+  waterConsumption Float?
+  mortality        Int?
+  temperature      Float?
+  humidity         Float?
+  notes            String?
+  images           String[]   // Array of image URLs for daily record
+  type             String?    // Type of record: "DAILY_RECORD", "IMAGE_UPLOAD", etc.
+  feedUsage        FeedUsage?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([flockId])
+  @@index([recordedBy])
+  @@index([type])
+}
+
+model FlockEvent {
+  id          String       @id @default(cuid())
+  flockId     String
+  eventType   String
+  date        DateTime
+  description String?
+  performedBy String?
+  notes       String?
+  createdAt   DateTime     @default(now())
+  flock       Flock        @relation(fields: [flockId], references: [id])
+  attachments Attachment[] @relation("AttachmentToFlockEvent")
+
+  @@index([flockId])
+  @@index([eventType])
+  @@index([date])
+}
+
+model Consultation {
+  id              String             @id @default(cuid())
+  veterinarianId  String
+  farmerId        String
+  farmId          String? // Added farmId reference
+  flockId         String?
+  title           String
+  description     String?
+  status          ConsultationStatus @default(REQUESTED)
+  priority        String             @default("NORMAL")
+  startTime       DateTime?
+  endTime         DateTime?
+  durationMinutes Int?
+  rating          Int?
+  isRemote        Boolean            @default(true)
+  location        Json?
+  notes           String?
+  diagnosis       String?
+  treatment       String?
+  followUpDate    DateTime?
+  farmerReadAt    DateTime? // Added to track when farmer last read messages
+  vetReadAt       DateTime? // Added to track when veterinarian last read messages
+  initiatedBy     String             @default("FARMER") // FARMER, VETERINARIAN
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @default(now()) @updatedAt
+  aiDiagnostics   AIDiagnostic[]
+  farmer          Farmer             @relation(fields: [farmerId], references: [id])
+  farm            Farm?              @relation(fields: [farmId], references: [id]) // Added Farm relation
+  flock           Flock?             @relation(fields: [flockId], references: [id])
+  veterinarian    Veterinarian       @relation(fields: [veterinarianId], references: [id])
+  messages        Message[]
+  prescriptions   Prescription[]
+  attachments     Attachment[]       @relation("AttachmentToConsultation")
+
+  @@index([veterinarianId])
+  @@index([farmerId])
+  @@index([farmId])
+  @@index([flockId])
+  @@index([status])
+}
+
+model Appointment {
+  id             String            @id @default(cuid())
+  veterinarianId String
+  farmerId       String
+  title          String
+  description    String?
+  status         AppointmentStatus @default(REQUESTED)
+  startTime      DateTime
+  endTime        DateTime
+  location       String?
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @default(now()) @updatedAt
+  farmer         Farmer            @relation(fields: [farmerId], references: [id])
+  veterinarian   Veterinarian      @relation(fields: [veterinarianId], references: [id])
+
+  @@index([veterinarianId])
+  @@index([farmerId])
+  @@index([status])
+}
+
+model Availability {
+  id             String       @id @default(cuid())
+  veterinarianId String
+  dayOfWeek      Int
+  startTime      String
+  endTime        String
+  isAvailable    Boolean      @default(true)
+  veterinarian   Veterinarian @relation(fields: [veterinarianId], references: [id])
+
+  @@index([veterinarianId])
+}
+
+model AppointmentType {
+  id             String       @id @default(cuid())
+  veterinarianId String
+  name           String
+  duration       Int
+  color          String
+  veterinarian   Veterinarian @relation(fields: [veterinarianId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @default(now()) @updatedAt
+
+  @@index([veterinarianId])
+}
+
+model TimeConfiguration {
+  id             String       @id @default(cuid())
+  veterinarianId String
+  timeInterval   Int          @default(15)
+  startHour      Int          @default(0)
+  endHour        Int          @default(24)
+  veterinarian   Veterinarian @relation(fields: [veterinarianId], references: [id])
+  updatedAt      DateTime     @default(now()) @updatedAt
+
+  @@unique([veterinarianId])
+  @@index([veterinarianId])
+}
+
+model TreatmentTemplate {
+  id             String       @id @default(cuid())
+  veterinarianId String
+  name           String
+  description    String?
+  species        String[]
+  conditions     String[]
+  medications    Json?
+  instructions   String?
+  notes          String?
+  isPublic       Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @default(now()) @updatedAt
+  veterinarian   Veterinarian @relation(fields: [veterinarianId], references: [id])
+
+  @@index([veterinarianId])
+}
+
+model Prescription {
+  id             String       @id @default(cuid())
+  consultationId String
+  medications    Json
+  instructions   String?
+  startDate      DateTime
+  endDate        DateTime?
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @default(now()) @updatedAt
+  consultation   Consultation @relation(fields: [consultationId], references: [id])
+
+  @@index([consultationId])
+}
+
+model Medication {
+  id                   String   @id @default(cuid())
+  name                 String
+  genericName          String?
+  category             String?
+  dosageForm           String?
+  strength             String?
+  manufacturer         String?
+  description          String?
+  usageInstructions    String?
+  sideEffects          String?
+  contraindications    String?
+  forSpecies           String[]
+  requiresPrescription Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([name])
+  @@index([genericName])
+}
+
+model ServicePackage {
+  id             String       @id @default(cuid())
+  veterinarianId String
+  name           String
+  description    String?
+  services       Json
+  price          Float
+  currency       String       @default("USD")
+  duration       Int?
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @default(now()) @updatedAt
+  veterinarian   Veterinarian @relation(fields: [veterinarianId], references: [id])
+
+  @@index([veterinarianId])
+}
+
+model Earning {
+  id              String       @id @default(cuid())
+  veterinarianId  String
+  amount          Float
+  currency        String       @default("USD")
+  source          String
+  sourceId        String?
+  status          String       @default("PENDING")
+  transactionDate DateTime     @default(now())
+  notes           String?
+  veterinarian    Veterinarian @relation(fields: [veterinarianId], references: [id])
+
+  @@index([veterinarianId])
+  @@index([source])
+  @@index([transactionDate])
+}
+
+model AIDiagnostic {
+  id                  String       @id @default(cuid())
+  consultationId      String
+  inputData           Json
+  results             Json
+  confidence          Float?
+  suggestedDiagnosis  String?
+  suggestedTreatments Json?
+  createdAt           DateTime     @default(now())
+  consultation        Consultation @relation(fields: [consultationId], references: [id])
+
+  @@index([consultationId])
+}
+
+model Conversation {
+  id           String    @id @default(cuid())
+  title        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+  messages     Message[]
+  participants User[]    @relation("UserConversations")
+
+  @@index([createdAt])
+}
+
+model Message {
+  id             String        @id @default(cuid())
+  conversationId String?
+  consultationId String?
+  senderId       String
+  receiverId     String
+  content        String
+  isRead         Boolean       @default(false)
+  readAt         DateTime?
+  createdAt      DateTime      @default(now())
+  consultation   Consultation? @relation(fields: [consultationId], references: [id])
+  conversation   Conversation? @relation(fields: [conversationId], references: [id])
+  receiver       User          @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  sender         User          @relation("SentMessages", fields: [senderId], references: [id])
+  attachments    Attachment[]  @relation("AttachmentToMessage")
+
+  @@index([conversationId])
+  @@index([consultationId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([createdAt])
+}
+
+model Review {
+  id             String       @id @default(cuid())
+  veterinarianId String
+  farmerId       String
+  rating         Int
+  comment        String?
+  isPublic       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  farmer         Farmer       @relation(fields: [farmerId], references: [id])
+  veterinarian   Veterinarian @relation(fields: [veterinarianId], references: [id])
+
+  @@index([veterinarianId])
+  @@index([farmerId])
+}
+
+model Attachment {
+  id                 String              @id @default(cuid())
+  filename           String
+  originalName       String?
+  mimeType           String?
+  size               Int?
+  url                String
+  thumbnailUrl       String?
+  uploadedBy         String?
+  createdAt          DateTime            @default(now())
+  consultations      Consultation[]      @relation("AttachmentToConsultation")
+  flockEvents        FlockEvent[]        @relation("AttachmentToFlockEvent")
+  flockHealthRecords FlockHealthRecord[] @relation("AttachmentToFlockHealthRecord")
+  messages           Message[]           @relation("AttachmentToMessage")
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+  link      String?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Activity {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  entityType String?
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model UserSettings {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  theme         String   @default("light")
+  notifications Json?
+  privacy       Json?
+  accessibility Json?
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Device {
+  id         String   @id @default(cuid())
+  userId     String
+  deviceType String
+  deviceName String?
+  deviceId   String?
+  pushToken  String?
+  lastActive DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model ResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([token])
+  @@index([userId])
+}
+
+model Announcement {
+  id          String    @id @default(cuid())
+  adminId     String
+  title       String
+  content     String
+  targetRoles String[]
+  startDate   DateTime  @default(now())
+  endDate     DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+  admin       Admin     @relation(fields: [adminId], references: [id])
+
+  @@index([adminId])
+  @@index([startDate])
+  @@index([endDate])
+}
+
+model SupportTicket {
+  id           String           @id @default(cuid())
+  userId       String?
+  title        String
+  description  String
+  category     String
+  priority     String           @default("MEDIUM")
+  status       String           @default("OPEN")
+  assignedToId String?
+  resolution   String?
+  attachments  Json?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @default(now()) @updatedAt
+  user         User?            @relation(fields: [userId], references: [id])
+  assignedTo   Admin?           @relation(fields: [assignedToId], references: [id])
+  messages     SupportMessage[]
+
+  @@index([userId])
+  @@index([assignedToId])
+  @@index([status])
+}
+
+model SupportMessage {
+  id              String        @id @default(cuid())
+  supportTicketId String
+  userId          String
+  content         String
+  isSystemMessage Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @default(now()) @updatedAt
+  attachments     Json?
+  supportTicket   SupportTicket @relation(fields: [supportTicketId], references: [id], onDelete: Cascade)
+  user            User          @relation(fields: [userId], references: [id])
+
+  @@index([supportTicketId])
+  @@index([userId])
+}
+
+model DataEntry {
+  id             String     @id @default(cuid())
+  farmWorkerId   String
+  entryType      String
+  entityId       String
+  createdAt      DateTime   @default(now())
+  syncedAt       DateTime?
+  isOfflineEntry Boolean    @default(false)
+  farmWorker     FarmWorker @relation(fields: [farmWorkerId], references: [id])
+
+  @@index([farmWorkerId])
+  @@index([entryType])
+}
+
+model Task {
+  id                  String     @id @default(cuid())
+  farmWorkerId        String
+  title               String
+  description         String?
+  dueDate             DateTime?
+  priority            String     @default("MEDIUM") // Enum? HIGH, MEDIUM, LOW
+  status              String     @default("PENDING") // Enum? PENDING, IN_PROGRESS, COMPLETED, CANCELLED
+  completedAt         DateTime?
+  category            String?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  farmWorker          FarmWorker @relation(fields: [farmWorkerId], references: [id])
+  recurrenceFrequency String? // e.g., "DAILY", "WEEKLY", "MONTHLY", "YEARLY"
+  recurrenceInterval  Int? // e.g., 1 for every day/week, 2 for every other week
+  recurrenceEndDate   DateTime? // Optional end date for recurrence
+  originalTaskId      String? // To link recurring instances to an original task
+
+  @@index([farmWorkerId])
+}
+
+model Region {
+  id              String           @id @default(cuid())
+  name            String
+  code            String?
+  parentId        String?
+  geometry        Json?
+  diseaseMappings DiseaseMapping[]
+  parent          Region?          @relation("RegionHierarchy", fields: [parentId], references: [id])
+  children        Region[]         @relation("RegionHierarchy")
+
+  @@index([parentId])
+}
+
+model DiseaseMapping {
+  id           String   @id @default(cuid())
+  regionId     String
+  diseaseName  String
+  caseCount    Int      @default(0)
+  reportedDate DateTime @default(now())
+  species      String[]
+  severity     String?
+  notes        String?
+  region       Region   @relation(fields: [regionId], references: [id])
+
+  @@index([regionId])
+  @@index([diseaseName])
+  @@index([reportedDate])
+}
+
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     String // ERROR, WARNING, INFO
+  message   String
+  source    String?
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@index([level])
+  @@index([createdAt])
+}
+
+model HealthAlert {
+  id          String   @id @default(cuid())
+  farmId      String
+  title       String
+  description String?
+  severity    String   @default("MEDIUM") // LOW, MEDIUM, HIGH
+  status      String   @default("NEW") // NEW, ACTIVE, RESOLVED, DISMISSED
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+  farm        Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+  @@index([farmId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Photo {
+  id           String     @id @default(cuid())
+  url          String
+  title        String
+  date         DateTime   @default(now())
+  flockId      String
+  flock        Flock      @relation(fields: [flockId], references: [id], onDelete: Cascade)
+  category     String // health, feed, equipment, growth, etc.
+  notes        String?
+  farmWorkerId String
+  farmWorker   FarmWorker @relation(fields: [farmWorkerId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @default(now()) @updatedAt
+
+  @@index([flockId])
+  @@index([farmWorkerId])
+  @@index([category])
+  @@index([date])
+}
+
+enum VeterinarianType {
+  VETERINARIAN
+  PARAVETERINARIAN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+  SUSPENDED
+  DELETED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  EXPIRED
+  PENDING
+  TRIAL
+}
+
+enum SubscriptionInterval {
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+enum ConsultationStatus {
+  REQUESTED
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  FOLLOW_UP_REQUIRED
+}
+
+enum AppointmentStatus {
+  REQUESTED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+// Financial management models
+model FinancialTransaction {
+  id                String             @id @default(cuid())
+  farmId            String
+  amount            Float
+  currency          String             @default("KES")
+  type              TransactionType
+  category          String
+  description       String?
+  date              DateTime
+  reference         String?
+  status            TransactionStatus  @default(COMPLETED)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @default(now()) @updatedAt
+  farm              Farm               @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  feedCost          FeedCost?
+  miscellaneousCost MiscellaneousCost?
+
+  @@index([farmId])
+  @@index([type])
+  @@index([date])
+  @@index([category])
+}
+
+model FeedCost {
+  id            String               @id @default(cuid())
+  transactionId String               @unique
+  flockId       String?
+  feedType      String
+  quantity      Float
+  unit          String               @default("kg")
+  pricePerUnit  Float
+  supplier      String?
+  purchaseDate  DateTime
+  expiryDate    DateTime?
+  qualityRating Int?
+  notes         String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @default(now()) @updatedAt
+  transaction   FinancialTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  flock         Flock?               @relation(fields: [flockId], references: [id])
+  feedUsages    FeedUsage[]          @relation("FeedCostToFeedUsage")
+
+  @@index([flockId])
+  @@index([feedType])
+  @@index([purchaseDate])
+}
+
+model MiscellaneousCost {
+  id            String               @id @default(cuid())
+  transactionId String               @unique
+  flockId       String?
+  costType      String
+  receiptImage  String?
+  notes         String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @default(now()) @updatedAt
+  transaction   FinancialTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  flock         Flock?               @relation(fields: [flockId], references: [id])
+
+  @@index([costType])
+  @@index([flockId])
+}
+
+model FinancialSummary {
+  id             String   @id @default(cuid())
+  farmId         String
+  month          Int
+  year           Int
+  totalRevenue   Float
+  totalExpenses  Float
+  netProfit      Float
+  feedCosts      Float
+  laborCosts     Float
+  medicineCosts  Float
+  utilityCosts   Float
+  equipmentCosts Float
+  otherCosts     Float
+  updatedAt      DateTime @updatedAt
+  farm           Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+  @@unique([farmId, month, year])
+  @@index([farmId])
+}
+
+// Financial enums
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+// Document models
+model Document {
+  id           String          @id @default(cuid())
+  name         String
+  originalName String?
+  description  String?
+  type         String // pdf, image, document, spreadsheet
+  size         Int
+  url          String
+  thumbnailUrl String?
+  category     String // health, financial, farm, workers, reports
+  uploadedBy   String
+  farmId       String
+  folderId     String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @default(now()) @updatedAt
+  farm         Farm            @relation("FarmToDocument", fields: [farmId], references: [id], onDelete: Cascade)
+  folder       DocumentFolder? @relation(fields: [folderId], references: [id])
+
+  @@index([farmId])
+  @@index([folderId])
+  @@index([category])
+  @@index([type])
+}
+
+model DocumentFolder {
+  id          String           @id @default(cuid())
+  name        String
+  description String?
+  farmId      String
+  parentId    String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @default(now()) @updatedAt
+  documents   Document[]
+  farm        Farm             @relation("FarmToDocumentFolder", fields: [farmId], references: [id], onDelete: Cascade)
+  parent      DocumentFolder?  @relation("FolderHierarchy", fields: [parentId], references: [id])
+  children    DocumentFolder[] @relation("FolderHierarchy")
+
+  @@index([farmId])
+  @@index([parentId])
+}
+
+// New model for breed-specific lifecycle data
+model AnimalBreed {
+  id                 String   @id @default(cuid())
+  name               String
+  species            String
+  category           String // "DUAL_PURPOSE", "BROILER", "LAYER"
+  supplier           String // "KENCHIC", "BREEDGATES", etc.
+  cycleWeeks         Float // Standard lifecycle in weeks (e.g., 6 weeks for broilers)
+  standardRatePerDay Float? // Standard growth rate per day in grams or kg
+  rateUnit           String   @default("g/day") // "g/day" or "kg/week"
+  ageRanges          Json? // Age-specific rate expectations by ranges
+  regionMultipliers  Json? // Region-specific multipliers
+  description        String?
+  source             String? // Source of breed standard data
+  documentUrl        String? // URL to supporting documentation
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  flocks             Flock[] // Reference to flocks of this breed
+  performanceStandards BreedPerformanceStandard[] // Add this line for breed performance standards
+  farmerId           String
+  farmer             Farmer   @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
+  @@unique([name, species, farmerId])
+  @@index([species])
+  @@index([name])
+  @@index([category])
+  @@index([supplier])
+  @@index([farmerId])
+}
+
+enum SaleProductType {
+  MEAT
+  EGG
+  MANURE
+  FEATHER
+  LIVE_BIRD
+  OTHER
+}
+
+model Sale {
+  id          String          @id @default(cuid())
+  farmId      String
+  farmerId    String
+  workerId    String?
+  flockId     String?
+  productType SaleProductType
+  quantity    Float
+  unit        String
+  amount      Float
+  date        DateTime
+  buyer       String?
+  buyerEmail  String? // Added
+  notes       String?
+  // Payment fields
+  paymentMode String? // MOBILE_MONEY, CHEQUE, CREDIT, CASH, OTHER
+  amountPaid  Float?  // Amount actually paid
+  balance     Float?  // Remaining balance
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @default(now()) @updatedAt
+
+  farm   Farm        @relation(fields: [farmId], references: [id])
+  farmer Farmer      @relation(fields: [farmerId], references: [id])
+  worker FarmWorker? @relation(fields: [workerId], references: [id])
+  flock  Flock?      @relation(fields: [flockId], references: [id])
+}
+
+model FeedUsage {
+  id             String       @id @default(cuid())
+  flockId        String
+  flock          Flock        @relation(fields: [flockId], references: [id])
+  feedType       String
+  amount         Float
+  date           DateTime     @default(now())
+  notes          String?
+  dailyRecordId  String?      @unique
+  dailyRecord    DailyRecord? @relation(fields: [dailyRecordId], references: [id])
+  feedCost       FeedCost?    @relation("FeedCostToFeedUsage", fields: [feedCostId], references: [id])
+  feedCostId     String?
+  recordedBy     String // ID of the farmer or farm worker
+  recordedByType UserType     @default(FARM_WORKER)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([flockId])
+  @@index([recordedBy])
+  @@index([feedCostId])
+}
+
+model ProductionRecord {
+  id         String   @id @default(cuid())
+  date       DateTime
+  type       String
+  quantity   Int
+  unit       String?
+  amount     Float?
+  buyer      String?
+  isSale     Boolean  @default(false)
+  eggDetails Json?    // Updated to include new grading system
+  notes      String?
+  flockId    String
+  userId     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  flock      Flock    @relation(fields: [flockId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([flockId])
+  @@index([userId])
+  @@index([date])
+  @@index([isSale])
+}
+
+enum UserType {
+  FARM_WORKER
+  FARMER
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  quantity    Int
+  unit        String
+  category    String
+  rating      Float?
+  farmerId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [farmerId], references: [id])
+  featured    Boolean  @default(false)
+  isNew       Boolean  @default(true)
+  trending    Boolean  @default(false)
+
+  @@index([farmerId])
+}
+
+model MarketplaceProduct {
+  id                String                     @id @default(cuid())
+  name              String
+  description       String
+  price             Float
+  quantity          Int
+  unit              String
+  category          String
+  farmerId          String
+  farmer            Farmer                     @relation(fields: [farmerId], references: [id])
+  phoneNumber       String? // Added phone number field
+  imageUrl          String? // Added image URL field
+  status            String                     @default("active") // Added status field
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  featured          Boolean                    @default(false)
+  isNew             Boolean                    @default(true)
+  trending          Boolean                    @default(false)
+  minOrderQuantity  Int?
+  location          String?
+  availability      String?
+  isPublicPage      Boolean                    @default(false)
+  diseaseManagement String?
+  feedingMethods    String?
+  productionProcess String?
+  productWeight     Float?
+  farmName          String?
+  farmLocation      String?
+  farmDescription   String?
+  farmPractices     Json?
+  reviews           MarketplaceProductReview[] // Add reviews relation
+
+  @@index([farmerId])
+  @@index([category])
+}
+
+model MarketplaceProductReview {
+  id        String             @id @default(cuid())
+  productId String
+  userId    String
+  rating    Int                @default(0)
+  comment   String?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @default(now()) @updatedAt
+  product   MarketplaceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Likes
+  likes MarketplaceProductReviewLike[]
+
+  // Replies (threaded comments)
+  parentId String?
+  parent   MarketplaceProductReview?  @relation("ReviewReplies", fields: [parentId], references: [id])
+  replies  MarketplaceProductReview[] @relation("ReviewReplies")
+
+  @@unique([productId, userId]) // One review per user per product
+  @@index([productId])
+  @@index([userId])
+}
+
+model MarketplaceProductReviewLike {
+  id        String   @id @default(cuid())
+  reviewId  String
+  userId    String
+  createdAt DateTime @default(now())
+  review    MarketplaceProductReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewId, userId])
+}
+
+// New Farm model to handle multiple farms per farmer
+model Farm {
+  id                   String                 @id @default(cuid())
+  farmerId             String
+  name                 String
+  farmType             String[]
+  farmSize             Float?
+  address              String?
+  city                 String?
+  state                String?
+  postalCode           String?
+  country              String?
+  location             Json?
+  status               FarmStatus             @default(ACTIVE)
+  isActive             Boolean                @default(true)
+  archivedAt           DateTime?
+  deletedAt            DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @default(now()) @updatedAt
+  farmer               Farmer                 @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  flocks               Flock[]
+  healthAlerts         HealthAlert[]
+  Consultation         Consultation[]
+  FinancialTransaction FinancialTransaction[]
+  FinancialSummary     FinancialSummary[]
+  documents            Document[]             @relation("FarmToDocument")
+  documentFolders      DocumentFolder[]       @relation("FarmToDocumentFolder")
+  sales                Sale[] // <--- Add this
+
+  @@index([farmerId])
+  @@index([status])
+}
+
+model Flock {
+  id                String              @id @default(cuid())
+  farmId            String
+  name              String
+  species           String
+  breed             String?
+  breedId           String? // Added breedId to reference AnimalBreed
+  quantity          Int
+  unitPrice         Float? // Unit price per chick/bird
+  startDate         DateTime
+  expectedEndDate   DateTime?
+  actualEndDate     DateTime?
+  purpose           String?
+  status            FlockStatus           @default(ACTIVE)
+  archivedAt        DateTime?
+  deletedAt         DateTime?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @default(now()) @updatedAt
+  consultations     Consultation[]
+  dailyRecords      DailyRecord[]
+  farmWorkers       FarmWorkerFlock[]
+  farm              Farm                  @relation(fields: [farmId], references: [id])
+  breedInfo         AnimalBreed?          @relation(fields: [breedId], references: [id]) // Added relation to AnimalBreed
+  events            FlockEvent[]
+  healthRecords     FlockHealthRecord[]
+  FeedCost          FeedCost[]
+  miscellaneousCosts MiscellaneousCost[]
+  photos            Photo[] // Added relation to Photo model
+  sales             Sale[] // <-- Added sales relation
+  productionRecords ProductionRecord[] // <-- Added productionRecords relation
+  feedUsages        FeedUsage[]
+  performanceMetrics PerformanceMetric[]
+  performanceAnalysis PerformanceAnalysis[]
+
+  @@index([farmId])
+  @@index([breedId]) // Added index for breedId
+  @@index([status])
+}
+
+model PerformanceMetric {
+  id                String   @id @default(cuid())
+  flockId           String
+  date              DateTime
+  metricType        MetricType
+  value             Float
+  unit              String
+  notes             String?
+  recordedBy        String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  flock             Flock    @relation(fields: [flockId], references: [id])
+  user              User     @relation(fields: [recordedBy], references: [id])
+
+  @@index([flockId])
+  @@index([date])
+  @@index([metricType])
+  @@index([recordedBy])
+}
+
+model BreedPerformanceStandard {
+  id                String   @id @default(cuid())
+  breedId           String
+  ageInDays         Int
+  metricType        MetricType
+  standardValue     Float
+  minValue          Float?
+  maxValue          Float?
+  unit              String
+  phase             String? // e.g., "Starter", "Grower", "Finisher"
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  breed             AnimalBreed @relation(fields: [breedId], references: [id])
+
+  @@unique([breedId, ageInDays, metricType])
+  @@index([breedId])
+  @@index([ageInDays])
+  @@index([metricType])
+}
+
+model PerformanceAnalysis {
+  id                String   @id @default(cuid())
+  flockId           String
+  analysisDate      DateTime
+  periodType        PeriodType // DAILY, WEEKLY, MONTHLY
+  startDate         DateTime
+  endDate           DateTime
+  
+  // Broiler metrics
+  avgWeight         Float?
+  totalWeightGain   Float?
+  dailyWeightGain   Float?
+  feedIntake        Float?
+  feedConversionRatio Float?
+  mortalityRate     Float?
+  
+  // Layer metrics
+  eggProduction     Int?
+  eggProductionRate Float? // eggs per bird per day
+  feedPerEgg        Float? // feed consumed per egg produced
+  
+  // Performance comparison
+  weightVariance    Float? // % difference from standard
+  feedVariance      Float? // % difference from standard
+  eggVariance       Float? // % difference from standard (layers)
+  overallScore      Float? // 0-100 performance score
+  
+  // Analysis metadata
+  dataPoints        Int
+  breedStandards    Json? // Snapshot of breed standards used
+  recommendations   String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  flock             Flock    @relation(fields: [flockId], references: [id])
+
+  @@index([flockId])
+  @@index([analysisDate])
+  @@index([periodType])
+}
+
+enum MetricType {
+  WEIGHT
+  FEED_INTAKE
+  WATER_CONSUMPTION
+  EGG_PRODUCTION
+  MORTALITY
+  TEMPERATURE
+  HUMIDITY
+  FEED_CONVERSION_RATIO
+  DAILY_WEIGHT_GAIN
+  EGG_PRODUCTION_RATE
+  FEED_PER_EGG
+}
+
+enum PeriodType {
+  DAILY
+  WEEKLY
+  MONTHLY
+}

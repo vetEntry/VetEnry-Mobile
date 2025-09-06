@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "VetEntry AI",
+    "slug": "vetentry-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./public/placeholder-logo.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./public/placeholder-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./public/placeholder-logo.png",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "web": {
+      "favicon": "./public/placeholder-logo.png"
+    }
+  }
+}
